@@ -42,12 +42,12 @@ CREATE TABLE #warnings (
 	,fix nvarchar(512)
 	,note nvarchar(128)
 )	
-EXEC sp_CONFIGURE 'show advanced options',1
+EXEC sp_configure 'show advanced options',1
 RECONFIGURE WITH OVERRIDE
 
 INSERT INTO #configuration 
 	EXEC sp_configure
-EXEC sp_CONFIGURE 'show advanced options',0
+EXEC sp_configure 'show advanced options',0
 RECONFIGURE WITH OVERRIDE
 
 
@@ -146,7 +146,7 @@ DECLARE @SQL VARCHAR(512)= 'Use [?]'
 +', LEFT(physical_name,3 /*Assuming WinOS */) drive'
 +' FROM sys.database_files '
 +' WHERE DB_ID() > 4 OR DB_ID() = 2;'
-exec sp_MSforeachdb @sql
+exec sp_MSforeachdb @SQL
 
 select 
 	'SQL File Info' AS 'title'
