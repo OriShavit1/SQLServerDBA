@@ -1,0 +1,45 @@
+declare 
+@suffix nvarchar(128) 
+,@original_path nvarchar(4000) --if backups were moved or restoring from network
+,@restore_path nvarchar(4000) --if backups were moved or restoring from network
+
+/* 
+--param templates
+SET @suffix = '_restore'; --for dbname
+SET @original_path = 'E:\Backups\' --search expression in source path
+SET @restore_path = '\\SQLSRV\Backupshare\' --replacement expression for restore path
+*/
+
+drop table if exists #restores
+--Find starttime of last full backup
+;WITH CTE AS(
+select bs.database_name, max(bs.backup_start_date) backup_base
+from msdb.dbo.backupset bs
+where type = 'D'
+group by database_name
+)
+--Find all following backups for each
+select row_number() over(order by bs.database_name) rownum,
+	CTE.database_name,
+	bs.type,
+	'RESTORE ' 
+	+ CASE 
+		WHEN bs.type = 'D' THEN 'DATABASE'
+		WHEN bs.type = 'L' THEN 'LOG' 
+		END + ' '
+	+ QUOTENAME (bs.database_name + ISNULL(@suffix,'')) 
+	+ ' FROM DISK = N''' + REPLACE(bmf.physical_device_name,ISNULL(@original_path,''),ISNULL(@restore_path,''))
+	+ ' WITH NOUNLOAD, STATS = 10, NORECOVERY;'
+	AS restore_cmd,
+	CTE.backup_base,
+	bs.backup_start_date
+into #restores
+from msdb.dbo.backupset bs
+	JOIN CTE on bs.backup_start_date >= CTE.backup_base 
+			AND CTE.database_name = bs.database_name
+	JOIN msdb.dbo.backupmediafamily bmf ON bmf.media_set_id=BS.media_set_id
+where bs.is_snapshot = 0
+and bmf.device_type = 2
+order by CTE.database_name,bs.backup_start_date
+
+select * from #restores
