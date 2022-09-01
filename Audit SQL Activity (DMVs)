@@ -92,9 +92,7 @@ BEGIN
 			[query_plan_text] XML NULL
 			CONSTRAINT PK_monitor_activity PRIMARY KEY CLUSTERED ([lut],[session_id],[connect_time]) 	
 		) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
-
 END
-
 
 	INSERT INTO [dbo].[monitor_activity]
 	           ([lut]
@@ -110,7 +108,7 @@ END
 	           ,[is_user_process]
 	           ,[client_interface_name]
 	           ,[login_name]
-			   ,[login_time]
+		   ,[login_time]
 	           ,[session_status]
 	           ,[ses_cpu_time]
 	           ,[ses_total_scheduled_time]
@@ -122,7 +120,7 @@ END
 	           ,[ses_writes]
 	           ,[database_id]
 	           ,[batch_text]
-			   ,[current_statement]
+		   ,[current_statement]
 	           ,[dbid]
 	           ,[objectid]
 	           ,[blocking_session_id]
@@ -159,8 +157,8 @@ END
 	           ,[tot_log_bytes_reserved]
 	           ,[tot_log_bytes_used_system]
 	           ,[tot_log_bytes_reserved_system]
-			   ,[batch_plan_xml]
-			   ,[query_plan_text]
+		   ,[batch_plan_xml]
+		   ,[query_plan_text]
 			   )
 	
 	SELECT  GETDATE() lut,
@@ -189,16 +187,18 @@ END
 			ses.database_id,
 			SUBSTRING(CASE 
 				WHEN sqltext.objectid IS NOT NULL AND sqltext.dbid <> 32767 then OBJECT_NAME(sqltext.objectid,sqltext.dbid)
-			ELSE sqltext.text END, 0,@MaxQueryLength) 
+				ELSE sqltext.text END, 0,@MaxQueryLength) 
 			AS batch_text
-	,SUBSTRING(SUBSTRING(sqltext.text, (req.statement_start_offset/2) + 1,  
-	    ((CASE statement_end_offset   
-	        WHEN -1 THEN DATALENGTH(sqltext.text)  
-	        ELSE req.statement_end_offset END   
-	            - req.statement_start_offset)/2) + 1) 
+			,SUBSTRING(SUBSTRING(
+					sqltext.text,
+					(req.statement_start_offset/2) + 1,  
+	    				((CASE statement_end_offset   
+		        			WHEN -1 THEN DATALENGTH(sqltext.text)  
+		        			ELSE req.statement_end_offset 
+					END 
+					- req.statement_start_offset)/2) + 1) 
 				,0,@MaxQueryLength) 
-				AS current_statement,
-
+			AS current_statement,
 			sqltext.dbid,
 			sqltext.objectid,
 			req.blocking_session_id,
@@ -237,7 +237,6 @@ END
 			tran_log.tot_log_bytes_reserved_system
 			,qp.query_plan batch_plan_xml
 			,CAST(QPtext.query_plan  AS XML) query_plan_text
-
 	FROM sys.dm_exec_connections conn
 	JOIN sys.dm_exec_sessions ses on ses.session_id = conn.session_id
 	LEFT JOIN sys.dm_exec_requests req on req.session_id = conn.session_id
