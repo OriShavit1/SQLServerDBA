@@ -295,12 +295,13 @@ exec [p_activity_monitor]
 ,@CollectQueryPlan  = 1 /* Of current executing statement */
 ,@CollectBatchPlan  = 1 /* Whole batch plan, consider as relatively consuming IO and space usage*/
 ,@MinimumReqTime_ms  = 0 /* Filter requests that just started */
-declare @minutes int = 60
+
 --View last X minutes
-  ;
-  WITH sessions AS (
-  select
-    session_id
+declare @minutes int = 60
+ ;
+ WITH sessions AS (
+ select
+   session_id
   ,connect_time
   ,login_time  
   , max(lut) last_lut
