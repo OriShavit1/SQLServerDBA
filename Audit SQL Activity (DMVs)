@@ -297,7 +297,7 @@ exec [p_activity_monitor]
 ,@MinimumReqTime_ms  = 0 /* Filter requests that just started */
 
 --View last X minutes
-declare @minutes int = 60
+declare @minutes int = 99999
   
 select 
 	a.session_id,
@@ -314,10 +314,7 @@ select
 	,CAST(MAX(ses_reads)*8/1024.0 AS DECIMAL(38,2))  AS max_ses_disk_read_MB
 	,CAST(MAX(logical_reads)*8/1024.0 AS DECIMAL(38,2))  AS max_req_memory_read_MB
 	,CAST(MAX(reads)*8/1024.0 AS DECIMAL(38,2))  AS max_req_disk_read_MB
-	,CAST(MAX(ses_logical_reads)*8/1024.0 AS DECIMAL(38,2))  AS max_ses_memory_read_MB
-	,CAST(MAX(ses_reads)*8/1024.0 AS DECIMAL(38,2))  AS max_ses_disk_read_MB
-	,CAST(MAX(logical_reads)*8/1024.0 AS DECIMAL(38,2))  AS max_req_memory_read_MB
-	,CAST(MAX(reads)*8/1024.0 AS DECIMAL(38,2))  AS max_req_disk_read_MB
+
 	
 from dbo.monitor_activity a
 	where 
