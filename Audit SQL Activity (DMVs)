@@ -298,42 +298,36 @@ exec [p_activity_monitor]
 
 --View last X minutes
 declare @minutes int = 60
- ;
- WITH sessions AS (
- select
-   session_id
-  ,connect_time
-  ,login_time  
-  , max(lut) last_lut
-    FROM dbo.monitor_activity
-	where lut > DATEADD(minute,-@minutes,GETDATE())
-	group by session_id, connect_time, login_time
-	)
-
-
+  
 select 
-a.client_host_name--a.lut
-,a.session_id,
---,a.connect_time,
-a.login_name
-,a.login_time
-,a.batch_text,
-a.current_statement
-,CAST(ses_total_elapsed_time / 1000.0 AS DECIMAL(38,2)) session_elapsed_sec
-,CAST(req_total_elapsed_time / 1000.0 AS DECIMAL(38,2)) req_elapsed_sec
-,CAST(ses_cpu_time/1000.0 AS DECIMAL(38,2))  AS ses_cpu_use_sec
-,CAST(req_cpu_time/1000.0 AS DECIMAL(38,2))  AS req_cpu_use_sec
-,CAST(ses_tot_wait_duration_ms/1000.0 AS DECIMAL(38,2))  AS ses_tot_waits_sec
-,CAST( ([tot_log_bytes_reserved] + [tot_log_bytes_reserved_system])/1000.0 AS Decimal(38,2)) AS total_log_mb
-,CAST(([internal_objects_alloc_page_count]+[user_objects_alloc_page_count]) * 8/1000.0 AS decimal(38,2)) total_temp_allocations_mb
-,a.batch_plan_xml
-,a.query_plan_text
+	a.session_id,
+	a.connect_time,
+	a.login_time
+	,CAST(MAX(ses_total_elapsed_time) / 1000.0 AS DECIMAL(38,2)) session_elapsed_sec
+	,CAST(MAX(req_total_elapsed_time) / 1000.0 AS DECIMAL(38,2)) longest_req_sec
+	,CAST(MAX(ses_cpu_time)/1000.0 AS DECIMAL(38,2))  AS max_ses_cpu_use_sec
+	,CAST(MAX(req_cpu_time)/1000.0 AS DECIMAL(38,2))  AS max_req_cpu_use_sec
+	,CAST(MAX(ses_tot_wait_duration_ms)/1000.0 AS DECIMAL(38,2))  AS ses_max_waits_sec
+	,CAST((MAX(tot_log_bytes_reserved) + MAX(tot_log_bytes_reserved_system))/1024.0/1024.0 AS decimal(38,2)) AS max_log_mb
+	,CAST((MAX(internal_objects_alloc_page_count)+MAX(user_objects_alloc_page_count)) * 8/1024.0 AS decimal(38,2)) AS max_temp_allocations_mb
+	,CAST(MAX(ses_logical_reads)*8/1024.0 AS DECIMAL(38,2))  AS max_ses_memory_read_MB
+	,CAST(MAX(ses_reads)*8/1024.0 AS DECIMAL(38,2))  AS max_ses_disk_read_MB
+	,CAST(MAX(logical_reads)*8/1024.0 AS DECIMAL(38,2))  AS max_req_memory_read_MB
+	,CAST(MAX(reads)*8/1024.0 AS DECIMAL(38,2))  AS max_req_disk_read_MB
+	,CAST(MAX(ses_logical_reads)*8/1024.0 AS DECIMAL(38,2))  AS max_ses_memory_read_MB
+	,CAST(MAX(ses_reads)*8/1024.0 AS DECIMAL(38,2))  AS max_ses_disk_read_MB
+	,CAST(MAX(logical_reads)*8/1024.0 AS DECIMAL(38,2))  AS max_req_memory_read_MB
+	,CAST(MAX(reads)*8/1024.0 AS DECIMAL(38,2))  AS max_req_disk_read_MB
+	
+from dbo.monitor_activity a
+	where 
+	lut > DATEADD(minute,-@minutes,GETDATE())
 
---,a.*
-from sessions s
-join dbo.monitor_activity a on a.lut = s.last_lut
-and a.session_id = s.session_id
-and a.login_time = s.login_time
+group by
+	a.session_id,
+	a.connect_time,
+	a.login_time
 
-order by ses_total_scheduled_time desc
+order by session_elapsed_sec desc
+
 */
