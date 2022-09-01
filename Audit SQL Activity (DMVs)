@@ -2,10 +2,10 @@
 -- Author:		Ori Shavit
 -- Description:	Use DMVs to audit sql activities into table
 -- =============================================
-DROP PROCEDURE IF EXISTS [p_activity_log] 
+DROP PROCEDURE IF EXISTS [p_activity_monitor] 
 GO
 ;
-CREATE PROCEDURE [dbo].[p_activity_log] 
+CREATE PROCEDURE [dbo].[p_activity_monitor] 
 --Note: for sleeping sessions, most recent handle is acquired
 (
 @ShowSleepSession bit = 0 /* Filter sessions without active requests*/
@@ -290,7 +290,7 @@ GO
 
 /*  
 
-exec [p_activity_log]
+exec [p_activity_monitor]
 @ShowSleepSession  = 1 /* Filter sessions without active requests*/
 ,@MaxQueryLength  = 4000 /* For SUBSTRING parameter */
 ,@CollectQueryPlan  = 1 /* Of current executing statement */
