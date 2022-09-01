@@ -1,0 +1,339 @@
+-- =============================================
+-- Author:		Ori Shavit
+-- Description:	Use DMVs to audit sql activities into table
+-- =============================================
+DROP PROCEDURE IF EXISTS [p_activity_log] 
+GO
+;
+CREATE PROCEDURE [dbo].[p_activity_log] 
+--Note: for sleeping sessions, most recent handle is acquired
+(
+@ShowSleepSession bit = 0 /* Filter sessions without active requests*/
+,@MaxQueryLength int = 4000 /* For SUBSTRING parameter */
+,@CollectQueryPlan bit = 1 /* Of current executing statement */
+,@CollectBatchPlan bit = 0 /* Whole batch plan, consider as relatively consuming IO and space usage*/
+,@MinimumReqTime_ms int = 30 /* Filter requests that just started. */
+)
+
+/*sample execution and query info in bottom*/
+
+AS
+BEGIN
+
+	SET NOCOUNT ON;
+	
+	IF OBJECT_ID('monitor_activity') IS NULL
+	BEGIN /*create the destination table*/
+		--DROP TABLE IF EXISTS [dbo].[monitor_activity]
+		CREATE TABLE [dbo].[monitor_activity](
+			[lut] [datetime] NOT NULL,
+			[session_id] [int] NOT NULL,
+			[connect_time] [datetime] NOT NULL,
+			[client_net_address] [nvarchar](128) NULL,
+			[conn_total_reads] [int] NULL,
+			[conn_total_writes] [int] NULL,
+			[conn_last_read] [datetime] NULL,
+			[client_host_name] [nvarchar](128) NULL,
+			[program_name] [nvarchar](128) NULL,
+			[host_process_id] [int] NULL,
+			[is_user_process] [bit] NULL,
+			[client_interface_name] [nvarchar](32) NULL,
+			[login_name] [nvarchar](128) NULL,
+			[login_time] [datetime] NULL,
+			[session_status] [nvarchar](30) NULL,
+			[ses_cpu_time] [int] NULL,
+			[ses_total_scheduled_time] [int] NULL,
+			[ses_total_elapsed_time] [int] NULL,
+			[last_request_start_time] [datetime] NULL,
+			[last_request_end_time] [datetime] NULL,
+			[ses_reads] [bigint] NULL,
+			[ses_logical_reads] [bigint] NULL,
+			[ses_writes] [bigint] NULL,
+			[database_id] [smallint] NULL,
+			[batch_text] [nvarchar](4000) NULL,
+			[current_statement] [nvarchar](4000) NULL,
+			[dbid] [smallint] NULL,
+			[objectid] [int] NULL,
+			[blocking_session_id] [smallint] NULL,
+			[command] [nvarchar](32) NULL,
+			[req_cpu_time] [int] NULL,
+			[dop] [int] NULL,
+			[granted_query_memory] [int] NULL,
+			[logical_reads] [bigint] NULL,
+			[last_wait_type] [nvarchar](60) NULL,
+			[open_transaction_count] [int] NULL,
+			[parallel_worker_count] [int] NULL,
+			[percent_complete] [real] NULL,
+			[query_hash] [binary](8) NULL,
+			[query_plan_hash] [binary](8) NULL,
+			[reads] [bigint] NULL,
+			[request_id] [int] NULL,
+			[row_count] [bigint] NULL,
+			[req_start_time] [datetime] NULL,
+			[req_status] [nvarchar](30) NULL,
+			[req_total_elapsed_time] [int] NULL,
+			[wait_resource] [nvarchar](256) NULL,
+			[req_wait_time] [int] NULL,
+			[req_wait_type] [nvarchar](60) NULL,
+			[req_writes] [bigint] NULL,
+			[ses_tot_wait_duration_ms] [bigint] NULL,
+			[user_objects_alloc_page_count] [bigint] NULL,
+			[user_objects_dealloc_page_count] [bigint] NULL,
+			[internal_objects_alloc_page_count] [bigint] NULL,
+			[internal_objects_dealloc_page_count] [bigint] NULL,
+			[user_objects_deferred_dealloc_page_count] [bigint] NULL,
+			[tot_tran_log_record_count] [bigint] NULL,
+			[tot_tran_replication_log_record_count] [int] NULL,
+			[tot_log_bytes_used] [bigint] NULL,
+			[tot_log_bytes_reserved] [bigint] NULL,
+			[tot_log_bytes_used_system] [int] NULL,
+			[tot_log_bytes_reserved_system] [int] NULL,
+			[batch_plan_xml] [xml] NULL,
+			[query_plan_text] XML NULL
+			CONSTRAINT PK_monitor_activity PRIMARY KEY CLUSTERED ([lut],[session_id],[connect_time]) 	
+		) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
+
+END
+
+
+	INSERT INTO [dbo].[monitor_activity]
+	           ([lut]
+	           ,[session_id]
+	           ,[connect_time]
+			   ,[client_net_address]
+	           ,[conn_total_reads]
+	           ,[conn_total_writes]
+	           ,[conn_last_read]
+	           ,[client_host_name]
+	           ,[program_name]
+	           ,[host_process_id]
+	           ,[is_user_process]
+	           ,[client_interface_name]
+	           ,[login_name]
+			   ,[login_time]
+	           ,[session_status]
+	           ,[ses_cpu_time]
+	           ,[ses_total_scheduled_time]
+	           ,[ses_total_elapsed_time]
+	           ,[last_request_start_time]
+	           ,[last_request_end_time]
+	           ,[ses_reads]
+	           ,[ses_logical_reads]
+	           ,[ses_writes]
+	           ,[database_id]
+	           ,[batch_text]
+			   ,[current_statement]
+	           ,[dbid]
+	           ,[objectid]
+	           ,[blocking_session_id]
+	           ,[command]
+	           ,[req_cpu_time]
+	           ,[dop]
+	           ,[granted_query_memory]
+	           ,[logical_reads]
+	           ,[last_wait_type]
+	           ,[open_transaction_count]
+	           ,[parallel_worker_count]
+	           ,[percent_complete]
+	           ,[query_hash]
+	           ,[query_plan_hash]
+	           ,[reads]
+	           ,[request_id]
+	           ,[row_count]
+	           ,[req_start_time]
+	           ,[req_status]
+	           ,[req_total_elapsed_time]
+	           ,[wait_resource]
+	           ,[req_wait_time]
+	           ,[req_wait_type]
+	           ,[req_writes]
+	           ,[ses_tot_wait_duration_ms]
+	           ,[user_objects_alloc_page_count]
+	           ,[user_objects_dealloc_page_count]
+	           ,[internal_objects_alloc_page_count]
+	           ,[internal_objects_dealloc_page_count]
+	           ,[user_objects_deferred_dealloc_page_count]
+	           ,[tot_tran_log_record_count]
+	           ,[tot_tran_replication_log_record_count]
+	           ,[tot_log_bytes_used]
+	           ,[tot_log_bytes_reserved]
+	           ,[tot_log_bytes_used_system]
+	           ,[tot_log_bytes_reserved_system]
+			   ,[batch_plan_xml]
+			   ,[query_plan_text]
+			   )
+	
+	SELECT  GETDATE() lut,
+			conn.session_id ,
+			conn.connect_time,
+			conn.client_net_address,
+			conn.num_reads conn_total_reads,
+			conn.num_writes conn_total_writes,
+			conn.last_read conn_last_read,
+			ses.host_name client_host_name,
+			ses.program_name,
+			ses.host_process_id,
+			ses.is_user_process,
+			ses.client_interface_name,
+			ses.login_name,
+			ses.login_time,
+			ses.status session_status,
+			ses.cpu_time ses_cpu_time,
+			ses.total_scheduled_time ses_total_scheduled_time,
+			ses.total_elapsed_time ses_total_elapsed_time,
+			ses.last_request_start_time,
+			ses.last_request_end_time,
+			ses.reads ses_reads,
+			ses.logical_reads ses_logical_reads,
+			ses.writes ses_writes,
+			ses.database_id,
+			SUBSTRING(CASE 
+				WHEN sqltext.objectid IS NOT NULL AND sqltext.dbid <> 32767 then OBJECT_NAME(sqltext.objectid,sqltext.dbid)
+			ELSE sqltext.text END, 0,@MaxQueryLength) 
+			AS batch_text
+	,SUBSTRING(SUBSTRING(sqltext.text, (req.statement_start_offset/2) + 1,  
+	    ((CASE statement_end_offset   
+	        WHEN -1 THEN DATALENGTH(sqltext.text)  
+	        ELSE req.statement_end_offset END   
+	            - req.statement_start_offset)/2) + 1) 
+				,0,@MaxQueryLength) 
+				AS current_statement,
+
+			sqltext.dbid,
+			sqltext.objectid,
+			req.blocking_session_id,
+			req.command,
+			req.cpu_time req_cpu_time,
+			req.dop,
+			req.granted_query_memory,
+			req.logical_reads,
+			req.last_wait_type,
+			req.open_transaction_count,
+			req.parallel_worker_count,
+			req.percent_complete,
+			req.query_hash,
+			req.query_plan_hash,
+			req.reads,
+			req.request_id,
+			req.row_count,
+			req.start_time req_start_time,
+			req.status req_status,
+			req.total_elapsed_time req_total_elapsed_time,
+			req.wait_resource,
+			req.wait_time req_wait_time,
+			req.wait_type req_wait_type,
+			req.writes req_writes,
+			seswaits.ses_tot_wait_duration_ms,
+			spu.user_objects_alloc_page_count,
+			spu.user_objects_dealloc_page_count,
+			spu.internal_objects_alloc_page_count,
+			spu.internal_objects_dealloc_page_count,
+			spu.user_objects_deferred_dealloc_page_count,
+			tran_log.tot_tran_log_record_count,
+			tran_log.tot_tran_replication_log_record_count,
+			tran_log.tot_log_bytes_used,
+			tran_log.tot_log_bytes_reserved,
+			tran_log.tot_log_bytes_used_system,
+			tran_log.tot_log_bytes_reserved_system
+			,qp.query_plan batch_plan_xml
+			,CAST(QPtext.query_plan  AS XML) query_plan_text
+
+	FROM sys.dm_exec_connections conn
+	JOIN sys.dm_exec_sessions ses on ses.session_id = conn.session_id
+	LEFT JOIN sys.dm_exec_requests req on req.session_id = conn.session_id
+	LEFT JOIN 
+			(
+		select 
+				session_id
+				,sum(database_transaction_log_record_count) tot_tran_log_record_count
+				,sum(database_transaction_replicate_record_count) tot_tran_replication_log_record_count
+				,sum(database_transaction_log_bytes_used) tot_log_bytes_used
+				,sum(database_transaction_log_bytes_reserved) tot_log_bytes_reserved
+				,sum(database_transaction_log_bytes_used_system) tot_log_bytes_used_system
+				,sum(database_transaction_log_bytes_reserved_system) tot_log_bytes_reserved_system	
+			from sys.dm_tran_session_transactions sestran 
+			JOIN sys.dm_tran_database_transactions dbtran on dbtran.transaction_id = sestran.transaction_id--sestran.transaction_id
+			group by session_id ) 
+		AS tran_log 
+		on tran_log.session_id = ses.session_id
+	LEFT JOIN  (
+		select 
+				session_id,sum(wait_time_ms) ses_tot_wait_duration_ms 
+			from sys.dm_exec_session_wait_stats
+			group by session_id) 
+		AS seswaits
+		ON seswaits.session_id = tran_log.session_id
+	LEFT JOIN sys.dm_db_session_space_usage spu on spu.session_id = ses.session_id 
+	OUTER APPLY sys.dm_exec_sql_text(ISNULL(req.sql_handle,conn.most_recent_sql_handle)) as sqltext
+	OUTER APPLY sys.dm_exec_query_plan(CASE 
+		WHEN @CollectBatchPlan = 1 THEN req.plan_handle 
+		ELSE NULL END) QP
+	OUTER APPLY sys.dm_exec_text_query_plan(CASE 
+		WHEN @CollectQueryPlan = 1 THEN req.plan_handle
+		ELSE NULL END
+		,req.statement_start_offset,  
+	    req.statement_end_offset 
+	            )QPText
+	where 1=1 
+	AND (req.session_id is NOT NULL or @ShowSleepSession = 1)
+	AND (ISNULL(req.total_elapsed_time,0) >= @minimumReqTime_ms) 
+
+	OPTION(RECOMPILE)
+	;
+	delete from dbo.monitor_activity
+	where lut < DATEADD(month,-1,GETDATE())
+
+
+END
+GO
+
+
+/*  
+
+exec [p_activity_log]
+@ShowSleepSession  = 1 /* Filter sessions without active requests*/
+,@MaxQueryLength  = 4000 /* For SUBSTRING parameter */
+,@CollectQueryPlan  = 1 /* Of current executing statement */
+,@CollectBatchPlan  = 1 /* Whole batch plan, consider as relatively consuming IO and space usage*/
+,@MinimumReqTime_ms  = 0 /* Filter requests that just started */
+declare @minutes int = 60
+--View last X minutes
+  ;
+  WITH sessions AS (
+  select
+    session_id
+  ,connect_time
+  ,login_time  
+  , max(lut) last_lut
+    FROM dbo.monitor_activity
+	where lut > DATEADD(minute,-@minutes,GETDATE())
+	group by session_id, connect_time, login_time
+	)
+
+
+select 
+a.client_host_name--a.lut
+,a.session_id,
+--,a.connect_time,
+a.login_name
+,a.login_time
+,a.batch_text,
+a.current_statement
+,CAST(ses_total_elapsed_time / 1000.0 AS DECIMAL(38,2)) session_elapsed_sec
+,CAST(req_total_elapsed_time / 1000.0 AS DECIMAL(38,2)) req_elapsed_sec
+,CAST(ses_cpu_time/1000.0 AS DECIMAL(38,2))  AS ses_cpu_use_sec
+,CAST(req_cpu_time/1000.0 AS DECIMAL(38,2))  AS req_cpu_use_sec
+,CAST(ses_tot_wait_duration_ms/1000.0 AS DECIMAL(38,2))  AS ses_tot_waits_sec
+,CAST( ([tot_log_bytes_reserved] + [tot_log_bytes_reserved_system])/1000.0 AS Decimal(38,2)) AS total_log_mb
+,CAST(([internal_objects_alloc_page_count]+[user_objects_alloc_page_count]) * 8/1000.0 AS decimal(38,2)) total_temp_allocations_mb
+,a.batch_plan_xml
+,a.query_plan_text
+
+--,a.*
+from sessions s
+join dbo.monitor_activity a on a.lut = s.last_lut
+and a.session_id = s.session_id
+and a.login_time = s.login_time
+
+order by ses_total_scheduled_time desc
+*/
