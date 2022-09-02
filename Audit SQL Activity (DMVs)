@@ -1,11 +1,12 @@
--- =============================================
--- Author:		Ori Shavit
--- Description:	Use DMVs to audit sql activities into table
--- =============================================
+
 DROP PROCEDURE IF EXISTS [p_activity_monitor] 
 GO
 ;
 CREATE PROCEDURE [dbo].[p_activity_monitor] 
+-- =============================================
+-- Author:		Ori Shavit
+-- Description:	Use DMVs to audit sql activities into table
+-- =============================================
 --Note: for sleeping sessions, most recent handle is acquired
 (
 @ShowSleepSession bit = 0 /* Filter sessions without active requests*/
@@ -283,9 +284,6 @@ END
 	where lut < DATEADD(month,-1,GETDATE())
 
 
-END
-GO
-
 
 /*  
 
@@ -328,3 +326,8 @@ group by
 order by session_elapsed_sec desc
 
 */
+END
+GO
+
+
+
