@@ -1,0 +1,16 @@
+declare @str nvarchar(256) = 'aaabbbbccddddffffggghgghhhgg'
+;
+with cte as (
+	select CAST(@str AS NVARCHAR(MAX)) val
+	,len(@str) as lvl --looping from end of string
+union all 
+select CASE
+ WHEN SUBSTRING(val,lvl-1,1) = SUBSTRING(val,lvl,1) --when last char equals previous
+ THEN CAST(STUFF(val,lvl,1,'') AS NVARCHAR(MAX)) -- remove previous
+ ELSE val END  
+ ,lvl-1
+from cte
+where lvl > 0 
+)
+select * from cte
+--where lvl = 0
