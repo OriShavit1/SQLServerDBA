@@ -287,43 +287,53 @@ END
 
 /*  
 
-exec [p_activity_monitor]
-@ShowSleepSession  = 1 /* Filter sessions without active requests*/
-,@MaxQueryLength  = 4000 /* For SUBSTRING parameter */
-,@CollectQueryPlan  = 1 /* Of current executing statement */
-,@CollectBatchPlan  = 1 /* Whole batch plan, consider as relatively consuming IO and space usage*/
-,@MinimumReqTime_ms  = 0 /* Filter requests that just started */
-
---View last X minutes
-declare @minutes int = 99999
-  
-select 
+declare @LastMinutes int = 60
+;WITH CTE AS ( select 
 	a.session_id,
 	a.connect_time,
 	a.login_time
+	,max(lut) last_collection
 	,CAST(MAX(ses_total_elapsed_time) / 1000.0 AS DECIMAL(38,2)) session_elapsed_sec
 	,CAST(MAX(req_total_elapsed_time) / 1000.0 AS DECIMAL(38,2)) longest_req_sec
 	,CAST(MAX(ses_cpu_time)/1000.0 AS DECIMAL(38,2))  AS max_ses_cpu_use_sec
 	,CAST(MAX(req_cpu_time)/1000.0 AS DECIMAL(38,2))  AS max_req_cpu_use_sec
-	,CAST(MAX(ses_tot_wait_duration_ms)/1000.0 AS DECIMAL(38,2))  AS ses_max_waits_sec
 	,CAST((MAX(tot_log_bytes_reserved) + MAX(tot_log_bytes_reserved_system))/1024.0/1024.0 AS decimal(38,2)) AS max_log_mb
 	,CAST((MAX(internal_objects_alloc_page_count)+MAX(user_objects_alloc_page_count)) * 8/1024.0 AS decimal(38,2)) AS max_temp_allocations_mb
+	,MAX(open_transaction_count)  AS max_trans
+	,CAST(MAX(ses_tot_wait_duration_ms)/1000.0 AS DECIMAL(38,2))  AS ses_max_waits_sec
 	,CAST(MAX(ses_logical_reads)*8/1024.0 AS DECIMAL(38,2))  AS max_ses_memory_read_MB
 	,CAST(MAX(ses_reads)*8/1024.0 AS DECIMAL(38,2))  AS max_ses_disk_read_MB
 	,CAST(MAX(logical_reads)*8/1024.0 AS DECIMAL(38,2))  AS max_req_memory_read_MB
 	,CAST(MAX(reads)*8/1024.0 AS DECIMAL(38,2))  AS max_req_disk_read_MB
 
-	
 from dbo.monitor_activity a
-	where 
-	lut > DATEADD(minute,-@minutes,GETDATE())
 
+	where 
+	lut > DATEADD(minute,-@LastMinutes ,GETDATE())
 group by
 	a.session_id,
 	a.connect_time,
 	a.login_time
+	)
+select 
+CASE WHEN alive.session_id IS NOT NULL THEN 'Yes' ELSE '' END AS still_alive,
+CTE.*,
+a.*
+FROM CTE 
+join dbo.monitor_activity a 
+on a.lut = CTE.last_collection
+and a.connect_time = CTE.connect_time
+and a.login_time = CTE.login_time
+left join sys.dm_exec_sessions alive 
+on alive.session_id = CTE.session_id
+and alive.login_time = CTE.login_time
+--where session_id = 404
+--order by lut desc
+order by session_elapsed_sec + longest_req_sec + max_ses_cpu_use_sec + max_req_cpu_use_sec + max_ses_memory_read_MB + max_temp_allocations_mb + max_req_memory_read_MB
+desc
 
-order by session_elapsed_sec desc
+--select top 1000 * from dbo.monitor_activity a 
+--order by lut desc
 
 */
 END
